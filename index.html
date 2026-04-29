@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Bubble Popping Game</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- MÀN HÌNH SETUP -->
+    <div id="setup-screen" class="screen active">
+        <div class="setup-container">
+            <h1>⚙️ Thiết lập Câu hỏi</h1>
+            
+            <div class="setup-content">
+                <!-- Phần bên trái: Danh sách câu hỏi -->
+                <div class="questions-area">
+                    <div id="questions-list"></div>
+                    <button id="add-question-btn" class="btn-add-question">
+                        ➕ Thêm câu hỏi
+                    </button>
+                </div>
+                
+                <!-- Phần bên phải: Cài đặt và điều khiển -->
+                <div class="control-area">
+                    <div class="time-setting">
+                        <label>⏱️ Thời gian mỗi câu (giây):</label>
+                        <input type="number" id="time-limit" min="5" max="300" value="20">
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <button id="start-game-btn" class="btn-start">
+                            🎮 Bắt đầu chơi
+                        </button>
+                        <button id="clear-all-btn" class="btn-clear">
+                            🗑️ Xóa tất cả
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MÀN HÌNH GAME AR -->
+    <div id="game-screen" class="screen">
+        <video id="webcam" autoplay playsinline></video>
+        <canvas id="game-canvas"></canvas>
+        
+        <!-- Nút Trang chủ - Riêng biệt -->
+        <button id="home-btn" class="btn-home">🏠 Trang chủ</button>
+        
+        <!-- Nút Toggle Hand Tracking -->
+        <button id="toggle-hands-btn" class="btn-toggle-hands" title="Bật/Tắt hiển thị tay">✋</button>
+        
+        <!-- Panel câu hỏi -->
+        <div id="question-panel" class="panel">
+            <h2 id="question-text">Đang tải...</h2>
+        </div>
+        
+        <!-- Timer Circle (riêng biệt) -->
+        <div id="timer-panel" class="panel timer-panel">
+            <div class="timer-circle">
+                <svg width="80" height="80">
+                    <circle class="timer-circle-bg" cx="40" cy="40" r="35"></circle>
+                    <circle id="timer-circle-progress" class="timer-circle-progress" cx="40" cy="40" r="35"></circle>
+                </svg>
+                <span id="timer-text">20</span>
+            </div>
+        </div>
+        
+        <!-- Panel điểm số -->
+        <div id="score-panel" class="panel">
+            <div class="score-item">
+                <span>Điểm:</span>
+                <span id="score">0</span>
+            </div>
+            <div class="score-item">
+                <span>Câu:</span>
+                <span><span id="current-q">0</span>/<span id="total-q">0</span></span>
+            </div>
+        </div>
+        
+        <!-- Màn hình kết quả -->
+        <div id="result-screen" class="panel result-panel hidden">
+            <h1>🎉 Kết quả</h1>
+            <div class="result-stats">
+                <div class="stat">
+                    <span class="stat-label">Tổng điểm:</span>
+                    <span id="final-score" class="stat-value">0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Câu đúng:</span>
+                    <span id="correct-count" class="stat-value">0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Câu sai:</span>
+                    <span id="wrong-count" class="stat-value">0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Độ chính xác:</span>
+                    <span id="accuracy" class="stat-value">0%</span>
+                </div>
+            </div>
+            <div class="result-actions">
+                <button id="play-again-btn" class="btn-primary">🔄 Chơi lại</button>
+                <button id="back-setup-btn" class="btn-secondary">⚙️ Sửa câu hỏi</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MediaPipe Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
