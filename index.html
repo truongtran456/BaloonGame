@@ -16,9 +16,14 @@
                 <!-- Phần bên trái: Danh sách câu hỏi -->
                 <div class="questions-area">
                     <div id="questions-list"></div>
-                    <button id="add-question-btn" class="btn-add-question">
-                        ➕ Thêm câu hỏi
-                    </button>
+                    <div class="add-buttons-row">
+                        <button id="add-question-btn" class="btn-add-question">
+                            ➕ Thêm câu hỏi
+                        </button>
+                        <button id="quick-add-btn" class="btn-quick-add">
+                            ⚡ Thêm nhanh
+                        </button>
+                    </div>
                 </div>
                 
                 <!-- Phần bên phải: Cài đặt và điều khiển -->
@@ -28,9 +33,29 @@
                         <input type="number" id="time-limit" min="5" max="300" value="20">
                     </div>
                     
+                    <!-- Nhạc nền -->
+                    <div class="music-setting">
+                        <label>🎵 Nhạc nền:</label>
+                        <input type="file" id="music-upload" accept="audio/*" style="display:none">
+                        <button id="upload-music-btn" class="btn-upload-music">📁 Tải nhạc lên</button>
+                        <div id="music-controls" class="music-controls hidden">
+                            <span id="music-name">Chưa có nhạc</span>
+                            <div class="music-actions">
+                                <button id="toggle-music-btn" class="btn-toggle-music-play">▶️ Phát</button>
+                                <button id="remove-music-btn" class="btn-remove-music">🗑️</button>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="action-buttons">
                         <button id="start-game-btn" class="btn-start">
                             🎮 Bắt đầu chơi
+                        </button>
+                        <button id="export-data-btn" class="btn-export">
+                            💾 Xuất dữ liệu
+                        </button>
+                        <button id="import-data-btn" class="btn-import">
+                            📥 Nhập dữ liệu
                         </button>
                         <button id="clear-all-btn" class="btn-clear">
                             🗑️ Xóa tất cả
@@ -40,6 +65,32 @@
             </div>
         </div>
     </div>
+    
+    <!-- Dialog Thêm Nhanh -->
+    <div id="quick-add-dialog" class="dialog-overlay hidden">
+        <div class="dialog-content">
+            <div class="dialog-header">
+                <h2>⚡ Thêm Nhiều Câu Hỏi</h2>
+                <button id="close-quick-add" class="btn-close-dialog">✖</button>
+            </div>
+            <div class="dialog-body">
+                <p class="dialog-instruction">
+                    <strong>Định dạng mỗi dòng:</strong> Câu hỏi | Đáp án A | Đáp án B | Đáp án đúng (A/B/C/D...)
+                </p>
+                <p class="dialog-example">
+                    <strong>Ví dụ (copy 3 dòng dưới đây để test):</strong>
+                </p>
+                <pre class="dialog-example-code">1 + 1 = ?|2|3|A
+Con gì có 4 chân?|Gà|Chó|B
+Thủ đô Việt Nam?|Hà Nội|Huế|A</pre>
+                <textarea id="quick-add-input" placeholder="Nhập câu hỏi theo định dạng trên, mỗi câu một dòng (không cần số thứ tự)..."></textarea>
+                <button id="process-quick-add" class="btn-process-quick">✅ Thêm vào danh sách</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Input ẩn cho import -->
+    <input type="file" id="import-file-input" accept=".json" style="display:none">
 
     <!-- MÀN HÌNH GAME AR -->
     <div id="game-screen" class="screen">
@@ -52,9 +103,17 @@
         <!-- Nút Toggle Hand Tracking -->
         <button id="toggle-hands-btn" class="btn-toggle-hands" title="Bật/Tắt hiển thị tay">✋</button>
         
+        <!-- Nút Toggle Nhạc nền -->
+        <button id="toggle-bg-music-btn" class="btn-toggle-music" title="Tắt nhạc nền" onclick="toggleBgMusic()">🎵</button>
+        
         <!-- Panel câu hỏi -->
         <div id="question-panel" class="panel">
-            <h2 id="question-text">Đang tải...</h2>
+            <div class="question-content-wrapper">
+                <h2 id="question-text">Đang tải...</h2>
+                <div id="question-image-container" class="question-image-display hidden">
+                    <img id="question-image" src="" alt="Question">
+                </div>
+            </div>
         </div>
         
         <!-- Timer Circle (riêng biệt) -->

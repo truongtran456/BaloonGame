@@ -82,10 +82,12 @@ function saveToStorage() {
     
     document.querySelectorAll('.question-card').forEach(card => {
         const questionInput = card.querySelector('.question-input');
+        const questionImagePreview = card.querySelector('.question-input-wrapper .image-preview');
         const answerRows = card.querySelectorAll('.answer-row');
         
         const question = {
             text: questionInput.value.trim(),
+            image: questionImagePreview?.dataset.image || null,
             answers: []
         };
         
@@ -93,10 +95,15 @@ function saveToStorage() {
         answerRows.forEach(row => {
             const radio = row.querySelector('input[type="radio"]');
             const input = row.querySelector('.answer-input');
+            const imagePreview = row.querySelector('.image-preview');
             const text = input.value.trim();
             
             if (text) {
-                question.answers.push(text);
+                const answerData = {
+                    text: text,
+                    image: imagePreview?.dataset.image || null
+                };
+                question.answers.push(answerData);
                 if (radio.checked) {
                     correctAnswer = text;
                 }
@@ -130,14 +137,48 @@ function loadFromStorage() {
                 const card = DOM.questionsList.lastElementChild;
                 card.querySelector('.question-input').value = q.text;
                 
+                // Load question image
+                if (q.image) {
+                    const wrapper = card.querySelector('.question-input-wrapper');
+                    const preview = wrapper.querySelector('.image-preview');
+                    preview.innerHTML = `
+                        <img src="${q.image}" alt="Question image">
+                        <button class="btn-remove-image" onclick="removeImage(this, '${card.dataset.qid}', 'question')">✖</button>
+                    `;
+                    preview.classList.remove('hidden');
+                    preview.dataset.image = q.image;
+                }
+                
                 const answersContainer = card.querySelector('.answers-container');
                 answersContainer.innerHTML = '';
                 
                 q.answers.forEach((answer, index) => {
                     addAnswerRow(answersContainer, card.dataset.qid);
                     const row = answersContainer.lastElementChild;
-                    row.querySelector('.answer-input').value = answer;
-                    if (answer === q.correctAnswer) {
+                    
+                    // Xử lý cả format cũ (string) và mới (object)
+                    const answerText = typeof answer === 'string' ? answer : (answer.text || '');
+                    const answerImage = typeof answer === 'object' ? answer.image : null;
+                    
+                    row.querySelector('.answer-input').value = answerText;
+                    
+                    // Load answer image
+                    if (answerImage) {
+                        const preview = row.querySelector('.image-preview');
+                        preview.innerHTML = `
+                            <img src="${answerImage}" alt="Answer image">
+                            <button class="btn-remove-image" onclick="removeAnswerImage(this)">✖</button>
+                        `;
+                        preview.classList.remove('hidden');
+                        preview.dataset.image = answerImage;
+                    }
+                    
+                    // So sánh với correctAnswer (có thể là string hoặc object)
+                    const isCorrectAnswer = typeof q.correctAnswer === 'string' 
+                        ? answerText === q.correctAnswer
+                        : (answerText === q.correctAnswer.text && answerImage === q.correctAnswer.image);
+                    
+                    if (isCorrectAnswer) {
                         row.querySelector('input[type="radio"]').checked = true;
                     }
                 });
@@ -165,7 +206,12 @@ function createQuestionCard() {
             <span class="question-number">Câu hỏi ${questionCounter}</span>
             <button class="btn-remove-question" onclick="removeQuestion('${qid}')">🗑️ Xóa</button>
         </div>
-        <input type="text" class="question-input" placeholder="Nhập nội dung câu hỏi...">
+        <div class="question-input-wrapper">
+            <input type="text" class="question-input" placeholder="Nhập nội dung câu hỏi...">
+            <input type="file" class="question-image-input" accept="image/*" style="display:none" data-target="question">
+            <button class="btn-upload-image" onclick="uploadImage('${qid}', 'question')">🖼️</button>
+            <div class="image-preview hidden"></div>
+        </div>
         <div class="answers-container"></div>
         <button class="btn-add-answer" onclick="addAnswer('${qid}')">➕ Thêm đáp án</button>
     `;
@@ -186,7 +232,10 @@ function addAnswerRow(container, qid) {
     row.innerHTML = `
         <input type="radio" name="correct-${qid}" title="Đáp án đúng">
         <input type="text" class="answer-input" placeholder="Nhập đáp án...">
+        <input type="file" class="answer-image-input" accept="image/*" style="display:none" data-target="answer">
+        <button class="btn-upload-image-small" onclick="uploadAnswerImage(this)">🖼️</button>
         <button class="btn-remove-answer" onclick="removeAnswerRow(this)">✖</button>
+        <div class="image-preview hidden"></div>
     `;
     
     container.appendChild(row);
@@ -231,9 +280,12 @@ function validateSetup() {
     document.querySelectorAll('.question-card').forEach(card => {
         const questionInput = card.querySelector('.question-input');
         const questionText = questionInput.value.trim();
+        const questionImagePreview = card.querySelector('.question-input-wrapper .image-preview');
+        const questionImage = questionImagePreview?.dataset.image || null;
         
-        if (!questionText) {
-            showError(questionInput, 'Vui lòng nhập câu hỏi!');
+        // Câu hỏi cần có ít nhất text HOẶC image
+        if (!questionText && !questionImage) {
+            showError(questionInput, 'Vui lòng nhập câu hỏi hoặc thêm ảnh!');
             isValid = false;
             return;
         }
@@ -245,12 +297,19 @@ function validateSetup() {
         answerRows.forEach(row => {
             const radio = row.querySelector('input[type="radio"]');
             const input = row.querySelector('.answer-input');
+            const imagePreview = row.querySelector('.image-preview');
             const text = input.value.trim();
+            const image = imagePreview?.dataset.image || null;
             
-            if (text) {
-                answers.push(text);
+            // Đáp án cần có ít nhất text HOẶC image
+            if (text || image) {
+                const answerData = {
+                    text: text || '',
+                    image: image
+                };
+                answers.push(answerData);
                 if (radio.checked) {
-                    correctAnswer = text;
+                    correctAnswer = answerData;
                 }
             }
         });
@@ -268,7 +327,8 @@ function validateSetup() {
         }
         
         questions.push({
-            text: questionText,
+            text: questionText || '',
+            image: questionImage,
             answers: answers,
             correctAnswer: correctAnswer
         });
@@ -305,12 +365,528 @@ function clearAll() {
     createQuestionCard();
 }
 
+// ==================== IMAGE UPLOAD ====================
+function uploadImage(qid, target) {
+    const card = document.querySelector(`[data-qid="${qid}"]`);
+    const input = card.querySelector('.question-image-input');
+    input.click();
+    
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const wrapper = card.querySelector('.question-input-wrapper');
+            const preview = wrapper.querySelector('.image-preview');
+            preview.innerHTML = `
+                <img src="${event.target.result}" alt="Question image">
+                <button class="btn-remove-image" onclick="removeImage(this, '${qid}', 'question')">✖</button>
+            `;
+            preview.classList.remove('hidden');
+            preview.dataset.image = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    };
+}
+
+function uploadAnswerImage(btn) {
+    const row = btn.closest('.answer-row');
+    const input = row.querySelector('.answer-image-input');
+    input.click();
+    
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const preview = row.querySelector('.image-preview');
+            preview.innerHTML = `
+                <img src="${event.target.result}" alt="Answer image">
+                <button class="btn-remove-image" onclick="removeAnswerImage(this)">✖</button>
+            `;
+            preview.classList.remove('hidden');
+            preview.dataset.image = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    };
+}
+
+function removeImage(btn, qid, target) {
+    const card = document.querySelector(`[data-qid="${qid}"]`);
+    const preview = card.querySelector('.question-input-wrapper .image-preview');
+    preview.innerHTML = '';
+    preview.classList.add('hidden');
+    delete preview.dataset.image;
+}
+
+function removeAnswerImage(btn) {
+    const preview = btn.closest('.image-preview');
+    preview.innerHTML = '';
+    preview.classList.add('hidden');
+    delete preview.dataset.image;
+}
+
+// ==================== QUICK ADD ====================
+function openQuickAdd() {
+    document.getElementById('quick-add-dialog').classList.remove('hidden');
+}
+
+function closeQuickAdd() {
+    document.getElementById('quick-add-dialog').classList.add('hidden');
+    document.getElementById('quick-add-input').value = '';
+}
+
+function processQuickAdd() {
+    const input = document.getElementById('quick-add-input').value.trim();
+    if (!input) {
+        alert('⚠️ Vui lòng nhập dữ liệu!');
+        return;
+    }
+    
+    const lines = input.split('\n').filter(line => line.trim());
+    let addedCount = 0;
+    let errorCount = 0;
+    
+    // Xóa tất cả câu hỏi trống trước khi thêm
+    const allCards = Array.from(document.querySelectorAll('.question-card'));
+    allCards.forEach(card => {
+        const questionText = card.querySelector('.question-input').value.trim();
+        const questionImage = card.querySelector('.question-input-wrapper .image-preview')?.dataset.image;
+        const answerRows = card.querySelectorAll('.answer-row');
+        
+        let hasValidAnswer = false;
+        answerRows.forEach(row => {
+            const answerText = row.querySelector('.answer-input').value.trim();
+            const answerImage = row.querySelector('.image-preview')?.dataset.image;
+            if (answerText || answerImage) {
+                hasValidAnswer = true;
+            }
+        });
+        
+        // Xóa nếu câu hỏi trống và không có đáp án hợp lệ
+        if (!questionText && !questionImage && !hasValidAnswer) {
+            card.remove();
+        }
+    });
+    
+    lines.forEach(line => {
+        const parts = line.split('|').map(p => p.trim());
+        
+        if (parts.length < 3) {
+            errorCount++;
+            return;
+        }
+        
+        const questionText = parts[0];
+        const correctAnswerIndex = parts[parts.length - 1].toUpperCase();
+        const answers = parts.slice(1, -1);
+        
+        if (answers.length < 2) {
+            errorCount++;
+            return;
+        }
+        
+        // Xác định đáp án đúng
+        const correctIndexMap = { 'A': 0, 'B': 1, 'C': 2, 'D': 3, 'E': 4, 'F': 5 };
+        const correctIdx = correctIndexMap[correctAnswerIndex];
+        
+        if (correctIdx === undefined || correctIdx >= answers.length) {
+            errorCount++;
+            return;
+        }
+        
+        // Tạo câu hỏi mới
+        createQuestionCard();
+        const card = DOM.questionsList.lastElementChild;
+        card.querySelector('.question-input').value = questionText;
+        
+        const answersContainer = card.querySelector('.answers-container');
+        answersContainer.innerHTML = '';
+        
+        answers.forEach((answer, index) => {
+            addAnswerRow(answersContainer, card.dataset.qid);
+            const row = answersContainer.lastElementChild;
+            row.querySelector('.answer-input').value = answer;
+            if (index === correctIdx) {
+                row.querySelector('input[type="radio"]').checked = true;
+            }
+        });
+        
+        addedCount++;
+    });
+    
+    // Đảm bảo luôn có ít nhất 1 câu hỏi
+    if (document.querySelectorAll('.question-card').length === 0) {
+        createQuestionCard();
+    }
+    
+    // Đánh số lại các câu hỏi
+    document.querySelectorAll('.question-card').forEach((card, index) => {
+        card.querySelector('.question-number').textContent = `Câu hỏi ${index + 1}`;
+    });
+    
+    if (addedCount > 0) {
+        alert(`✅ Đã thêm ${addedCount} câu hỏi!${errorCount > 0 ? `\n⚠️ ${errorCount} dòng bị lỗi định dạng.` : ''}`);
+        closeQuickAdd();
+        saveToStorage();
+    } else {
+        alert('❌ Không có câu hỏi nào hợp lệ!\nKiểm tra lại định dạng.');
+    }
+}
+
+// ==================== EXPORT/IMPORT DATA ====================
+function exportData() {
+    saveToStorage();
+    const data = localStorage.getItem(CONFIG.STORAGE_KEY);
+    if (!data) {
+        alert('⚠️ Không có dữ liệu để xuất!');
+        return;
+    }
+    
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `bubble-game-data-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    alert('✅ Đã xuất dữ liệu thành công!');
+}
+
+function importData() {
+    const input = document.getElementById('import-file-input');
+    input.click();
+    
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const data = JSON.parse(event.target.result);
+                localStorage.setItem(CONFIG.STORAGE_KEY, event.target.result);
+                
+                if (loadFromStorage()) {
+                    alert('✅ Đã nhập dữ liệu thành công!');
+                } else {
+                    alert('⚠️ Dữ liệu không hợp lệ!');
+                }
+            } catch (e) {
+                alert('❌ Lỗi: File không đúng định dạng!');
+            }
+        };
+        reader.readAsText(file);
+    };
+}
+
+// ==================== BACKGROUND MUSIC (Web Audio) ====================
+let bgMusicNodes = null;
+let bgMusicEnabled = true;
+
+// Giai điệu vui nhộn: C D E G A (pentatonic)
+const MELODY = [
+    // Bar 1
+    { note: 523.25, dur: 0.25 }, // C5
+    { note: 587.33, dur: 0.25 }, // D5
+    { note: 659.25, dur: 0.25 }, // E5
+    { note: 783.99, dur: 0.25 }, // G5
+    // Bar 2
+    { note: 880.00, dur: 0.25 }, // A5
+    { note: 783.99, dur: 0.25 }, // G5
+    { note: 659.25, dur: 0.25 }, // E5
+    { note: 587.33, dur: 0.25 }, // D5
+    // Bar 3
+    { note: 523.25, dur: 0.25 }, // C5
+    { note: 659.25, dur: 0.25 }, // E5
+    { note: 783.99, dur: 0.5  }, // G5 (dài hơn)
+    // Bar 4
+    { note: 880.00, dur: 0.25 }, // A5
+    { note: 783.99, dur: 0.25 }, // G5
+    { note: 659.25, dur: 0.25 }, // E5
+    { note: 523.25, dur: 0.5  }, // C5 (dài hơn)
+];
+
+// Bass line
+const BASS = [
+    { note: 130.81, dur: 0.5 }, // C3
+    { note: 164.81, dur: 0.5 }, // E3
+    { note: 196.00, dur: 0.5 }, // G3
+    { note: 164.81, dur: 0.5 }, // E3
+];
+
+function startBgMusic() {
+    if (!bgMusicEnabled) return;
+    if (bgMusicNodes) return;
+    
+    try {
+        if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioContext.state === 'suspended') audioContext.resume();
+        
+        const masterGain = audioContext.createGain();
+        masterGain.gain.value = 0.18;
+        masterGain.connect(audioContext.destination);
+        
+        bgMusicNodes = { masterGain, stopped: false };
+        
+        scheduleMelody(masterGain);
+        scheduleBass(masterGain);
+        scheduleDrums(masterGain);
+    } catch(e) {
+        console.error('BG music error:', e);
+    }
+}
+
+function scheduleMelody(masterGain) {
+    if (!bgMusicNodes || bgMusicNodes.stopped) return;
+    
+    const totalDur = MELODY.reduce((s, n) => s + n.dur, 0);
+    let t = audioContext.currentTime + 0.05;
+    
+    MELODY.forEach(({ note, dur }) => {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.connect(gain); gain.connect(masterGain);
+        osc.type = 'triangle';
+        osc.frequency.value = note;
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.6, t + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + dur * 0.85);
+        osc.start(t);
+        osc.stop(t + dur);
+        t += dur;
+    });
+    
+    // Lặp lại
+    bgMusicNodes._melodyTimeout = setTimeout(() => scheduleMelody(masterGain), totalDur * 1000);
+}
+
+function scheduleBass(masterGain) {
+    if (!bgMusicNodes || bgMusicNodes.stopped) return;
+    
+    const totalDur = BASS.reduce((s, n) => s + n.dur, 0);
+    let t = audioContext.currentTime + 0.05;
+    
+    BASS.forEach(({ note, dur }) => {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.connect(gain); gain.connect(masterGain);
+        osc.type = 'sine';
+        osc.frequency.value = note;
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.5, t + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + dur * 0.8);
+        osc.start(t);
+        osc.stop(t + dur);
+        t += dur;
+    });
+    
+    bgMusicNodes._bassTimeout = setTimeout(() => scheduleBass(masterGain), totalDur * 1000);
+}
+
+function scheduleDrums(masterGain) {
+    if (!bgMusicNodes || bgMusicNodes.stopped) return;
+    
+    const beatDur = 0.5;
+    const beats = 8;
+    let t = audioContext.currentTime + 0.05;
+    
+    for (let i = 0; i < beats; i++) {
+        // Kick mỗi 2 beat
+        if (i % 2 === 0) {
+            const buf = audioContext.createBuffer(1, audioContext.sampleRate * 0.1, audioContext.sampleRate);
+            const data = buf.getChannelData(0);
+            for (let j = 0; j < data.length; j++) {
+                data[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / data.length, 3);
+            }
+            const src = audioContext.createBufferSource();
+            const gain = audioContext.createGain();
+            src.buffer = buf;
+            src.connect(gain); gain.connect(masterGain);
+            gain.gain.setValueAtTime(0.8, t + i * beatDur);
+            gain.gain.exponentialRampToValueAtTime(0.01, t + i * beatDur + 0.1);
+            src.start(t + i * beatDur);
+        }
+        // Hi-hat mỗi beat
+        const buf2 = audioContext.createBuffer(1, audioContext.sampleRate * 0.05, audioContext.sampleRate);
+        const data2 = buf2.getChannelData(0);
+        for (let j = 0; j < data2.length; j++) {
+            data2[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / data2.length, 2);
+        }
+        const src2 = audioContext.createBufferSource();
+        const gain2 = audioContext.createGain();
+        const filter = audioContext.createBiquadFilter();
+        filter.type = 'highpass';
+        filter.frequency.value = 5000;
+        src2.buffer = buf2;
+        src2.connect(filter); filter.connect(gain2); gain2.connect(masterGain);
+        gain2.gain.setValueAtTime(0.3, t + i * beatDur);
+        gain2.gain.exponentialRampToValueAtTime(0.01, t + i * beatDur + 0.05);
+        src2.start(t + i * beatDur);
+    }
+    
+    bgMusicNodes._drumTimeout = setTimeout(() => scheduleDrums(masterGain), beats * beatDur * 1000);
+}
+
+function stopBgMusic() {
+    if (!bgMusicNodes) return;
+    bgMusicNodes.stopped = true;
+    clearTimeout(bgMusicNodes._melodyTimeout);
+    clearTimeout(bgMusicNodes._bassTimeout);
+    clearTimeout(bgMusicNodes._drumTimeout);
+    try {
+        bgMusicNodes.masterGain.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.3);
+    } catch(e) {}
+    bgMusicNodes = null;
+}
+
+function toggleBgMusic() {
+    bgMusicEnabled = !bgMusicEnabled;
+    const btn = document.getElementById('toggle-bg-music-btn');
+    if (bgMusicEnabled) {
+        btn.textContent = '🎵';
+        btn.title = 'Tắt nhạc nền';
+        btn.classList.remove('muted');
+        // Chỉ unmute, không restart
+        if (bgMusicNodes) {
+            bgMusicNodes.masterGain.gain.value = 0.18;
+        } else if (backgroundMusic) {
+            backgroundMusic.muted = false;
+        } else {
+            startGameMusic();
+        }
+    } else {
+        btn.textContent = '🔇';
+        btn.title = 'Bật nhạc nền';
+        btn.classList.add('muted');
+        // Chỉ mute, không dừng
+        if (bgMusicNodes) {
+            bgMusicNodes.masterGain.gain.value = 0;
+        }
+        if (backgroundMusic) {
+            backgroundMusic.muted = true;
+        }
+    }
+}
+
+let backgroundMusic = null;
+let musicData = null;
+
+function uploadMusic() {
+    const input = document.getElementById('music-upload');
+    input.click();
+    
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            musicData = {
+                name: file.name,
+                data: event.target.result
+            };
+            localStorage.setItem('bubble_game_music', JSON.stringify(musicData));
+            updateMusicControls();
+            alert('✅ Đã tải nhạc lên thành công!');
+        };
+        reader.readAsDataURL(file);
+    };
+}
+
+function updateMusicControls() {
+    const controls = document.getElementById('music-controls');
+    const nameEl = document.getElementById('music-name');
+    
+    if (musicData) {
+        controls.classList.remove('hidden');
+        nameEl.textContent = musicData.name;
+        if (!backgroundMusic) {
+            backgroundMusic = new Audio(musicData.data);
+            backgroundMusic.loop = true;
+            backgroundMusic.volume = 0.3;
+        }
+    } else {
+        controls.classList.add('hidden');
+    }
+}
+
+function toggleMusic() {
+    if (!backgroundMusic) return;
+    const toggleBtn = document.getElementById('toggle-music-btn');
+    if (backgroundMusic.paused) {
+        backgroundMusic.play();
+        toggleBtn.textContent = '⏸️ Dừng';
+    } else {
+        backgroundMusic.pause();
+        toggleBtn.textContent = '▶️ Phát';
+    }
+}
+
+function removeMusic() {
+    if (backgroundMusic) {
+        backgroundMusic.pause();
+        backgroundMusic = null;
+    }
+    musicData = null;
+    localStorage.removeItem('bubble_game_music');
+    updateMusicControls();
+    document.getElementById('toggle-music-btn').textContent = '▶️ Phát';
+}
+
+function loadMusic() {
+    try {
+        const saved = localStorage.getItem('bubble_game_music');
+        if (saved) {
+            musicData = JSON.parse(saved);
+            updateMusicControls();
+        }
+    } catch (e) {
+        console.error('Load music error:', e);
+    }
+}
+
+// Bắt đầu nhạc khi vào game: ưu tiên nhạc user, fallback nhạc mặc định
+function startGameMusic() {
+    if (!bgMusicEnabled) return;
+    
+    if (musicData && musicData.data) {
+        // Dùng nhạc user tải lên
+        stopBgMusic(); // Dừng nhạc mặc định nếu đang chạy
+        if (!backgroundMusic) {
+            backgroundMusic = new Audio(musicData.data);
+            backgroundMusic.loop = true;
+            backgroundMusic.volume = 0.3;
+        }
+        backgroundMusic.currentTime = 0;
+        backgroundMusic.play().catch(e => console.error(e));
+    } else {
+        // Dùng nhạc mặc định
+        startBgMusic();
+    }
+}
+
+// Dừng tất cả nhạc
+function stopGameMusic() {
+    if (backgroundMusic && !backgroundMusic.paused) {
+        backgroundMusic.pause();
+        backgroundMusic.currentTime = 0;
+    }
+    stopBgMusic();
+}
+
 // ==================== GAME LOGIC ====================
 
 class Bubble {
-    constructor(text, isCorrect) {
+    constructor(text, isCorrect, image = null) {
         this.text = text;
         this.isCorrect = isCorrect;
+        this.image = image;
         this.x = Math.random() * (DOM.canvas.width - 300) + 150;
         this.y = DOM.canvas.height + 150;
         this.radius = CONFIG.BUBBLE_SIZE_MIN + Math.random() * (CONFIG.BUBBLE_SIZE_MAX - CONFIG.BUBBLE_SIZE_MIN);
@@ -319,41 +895,74 @@ class Bubble {
         this.wobbleSpeed = 0.015 + Math.random() * 0.015;
         this.hue = Math.random() * 360;
         this.popped = false;
+        this.imageObj = null;
+        // Trạng thái bóp sai
+        this.wrongHit = false;
+        this.wrongTimer = 0;
+        this.shakeOffset = 0;
+        
+        if (this.image) {
+            this.imageObj = new Image();
+            this.imageObj.src = this.image;
+        }
     }
     
     update() {
         this.y -= this.speed;
         this.wobble += this.wobbleSpeed;
-        this.x += Math.sin(this.wobble) * 0.4;
+        
+        if (this.wrongHit) {
+            this.wrongTimer++;
+            this.shakeOffset = Math.sin(this.wrongTimer * 1.8) * 14 * (1 - this.wrongTimer / 30);
+            if (this.wrongTimer >= 30) {
+                this.wrongHit = false;
+                this.shakeOffset = 0;
+            }
+        } else {
+            this.x += Math.sin(this.wobble) * 0.4;
+        }
+        
         this.hue = (this.hue + 0.3) % 360;
     }
     
     draw() {
         if (this.popped) return;
         
-        const x = this.x;
+        const x = this.x + this.shakeOffset;
         const y = this.y;
         const r = this.radius;
         
-        // Gradient
+        // Đỏ khi bóp sai, màu bình thường khi không
+        const hue = this.wrongHit ? 0 : this.hue;
+        
         const gradient = ctx.createRadialGradient(
             x - r * 0.3, y - r * 0.3, r * 0.1,
             x, y, r
         );
-        gradient.addColorStop(0, `hsla(${this.hue}, 100%, 80%, 0.9)`);
-        gradient.addColorStop(0.5, `hsla(${this.hue + 30}, 100%, 60%, 0.7)`);
-        gradient.addColorStop(1, `hsla(${this.hue + 60}, 100%, 40%, 0.8)`);
+        if (this.wrongHit) {
+            gradient.addColorStop(0, 'hsla(0, 100%, 75%, 0.95)');
+            gradient.addColorStop(0.5, 'hsla(0, 100%, 50%, 0.85)');
+            gradient.addColorStop(1, 'hsla(0, 100%, 30%, 0.9)');
+        } else {
+            gradient.addColorStop(0, `hsla(${hue}, 100%, 80%, 0.9)`);
+            gradient.addColorStop(0.5, `hsla(${hue + 30}, 100%, 60%, 0.7)`);
+            gradient.addColorStop(1, `hsla(${hue + 60}, 100%, 40%, 0.8)`);
+        }
         
-        // Draw bubble
         ctx.beginPath();
         ctx.arc(x, y, r, 0, Math.PI * 2);
         ctx.fillStyle = gradient;
         ctx.fill();
         
-        // Border
-        ctx.strokeStyle = `hsla(${this.hue}, 80%, 90%, 0.6)`;
-        ctx.lineWidth = 3;
+        // Viền đỏ dày khi sai
+        ctx.strokeStyle = this.wrongHit ? 'rgba(255, 30, 30, 1)' : `hsla(${hue}, 80%, 90%, 0.6)`;
+        ctx.lineWidth = this.wrongHit ? 6 : 3;
+        if (this.wrongHit) {
+            ctx.shadowColor = '#ff0000';
+            ctx.shadowBlur = 20;
+        }
         ctx.stroke();
+        ctx.shadowBlur = 0;
         
         // Highlight
         ctx.beginPath();
@@ -361,26 +970,58 @@ class Bubble {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
         ctx.fill();
         
-        // Text - Tự động điều chỉnh size
-        const maxTextWidth = r * 1.6;
-        let fontSize = Math.max(18, r * 0.45);
-        ctx.font = `bold ${fontSize}px Arial`;
-        
-        // Giảm font size nếu text quá dài
-        let textWidth = ctx.measureText(this.text).width;
-        while (textWidth > maxTextWidth && fontSize > 14) {
-            fontSize -= 1;
-            ctx.font = `bold ${fontSize}px Arial`;
-            textWidth = ctx.measureText(this.text).width;
+        // Dấu X trắng to khi bóp sai
+        if (this.wrongHit) {
+            const alpha = Math.min(1, this.wrongTimer / 5);
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 7;
+            ctx.lineCap = 'round';
+            ctx.shadowColor = '#ff0000';
+            ctx.shadowBlur = 20;
+            const s = r * 0.42;
+            ctx.beginPath();
+            ctx.moveTo(x - s, y - s); ctx.lineTo(x + s, y + s);
+            ctx.moveTo(x + s, y - s); ctx.lineTo(x - s, y + s);
+            ctx.stroke();
+            ctx.restore();
+            return; // Không vẽ nội dung khi đang hiệu ứng sai
         }
         
-        ctx.fillStyle = 'white';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-        ctx.shadowBlur = 8;
-        ctx.fillText(this.text, x, y);
-        ctx.shadowBlur = 0;
+        // Nội dung bình thường
+        if (this.imageObj && this.imageObj.complete) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(x, y, r * 0.7, 0, Math.PI * 2);
+            ctx.clip();
+            const imgSize = r * 1.4;
+            ctx.drawImage(this.imageObj, x - imgSize/2, y - imgSize/2, imgSize, imgSize);
+            ctx.restore();
+        } else if (this.text) {
+            const maxTextWidth = r * 1.6;
+            let fontSize = Math.max(18, r * 0.45);
+            ctx.font = `bold ${fontSize}px Arial`;
+            let textWidth = ctx.measureText(this.text).width;
+            while (textWidth > maxTextWidth && fontSize > 14) {
+                fontSize -= 1;
+                ctx.font = `bold ${fontSize}px Arial`;
+                textWidth = ctx.measureText(this.text).width;
+            }
+            ctx.fillStyle = 'white';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+            ctx.shadowBlur = 8;
+            ctx.fillText(this.text, x, y);
+            ctx.shadowBlur = 0;
+        }
+    }
+    
+    triggerWrongHit() {
+        this.wrongHit = true;
+        this.wrongTimer = 0;
+        this.shakeOffset = 0;
     }
     
     isOffScreen() {
@@ -428,15 +1069,113 @@ class Particle {
     }
 }
 
+// Hiệu ứng text bay lên
+class TextParticle {
+    constructor(x, y, text, color) {
+        this.x = x;
+        this.y = y;
+        this.text = text;
+        this.color = color;
+        this.life = 1;
+        this.vy = -3;
+        this.scale = 0.5;
+    }
+    
+    update() {
+        this.y += this.vy;
+        this.vy *= 0.95;
+        this.life -= 0.015;
+        
+        // Scale tăng dần rồi giảm
+        if (this.scale < 1.5) {
+            this.scale += 0.08;
+        }
+    }
+    
+    draw() {
+        ctx.save();
+        ctx.globalAlpha = this.life;
+        ctx.font = `bold ${40 * this.scale}px Arial`;
+        ctx.fillStyle = this.color;
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 3;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = this.color;
+        ctx.shadowBlur = 20;
+        
+        ctx.strokeText(this.text, this.x, this.y);
+        ctx.fillText(this.text, this.x, this.y);
+        
+        ctx.restore();
+    }
+    
+    isDead() {
+        return this.life <= 0;
+    }
+}
+
+// Hiệu ứng vòng tròn lan tỏa
+class RippleEffect {
+    constructor(x, y, isCorrect) {
+        this.x = x;
+        this.y = y;
+        this.radius = 0;
+        this.maxRadius = 200;
+        this.color = isCorrect ? '#00ff88' : '#ff4444';
+        this.life = 1;
+    }
+    
+    update() {
+        this.radius += 8;
+        this.life -= 0.02;
+    }
+    
+    draw() {
+        ctx.save();
+        ctx.globalAlpha = this.life * 0.6;
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 6;
+        ctx.shadowColor = this.color;
+        ctx.shadowBlur = 15;
+        
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Vòng tròn thứ 2 nhỏ hơn
+        ctx.globalAlpha = this.life * 0.4;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius * 0.7, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        ctx.restore();
+    }
+    
+    isDead() {
+        return this.life <= 0 || this.radius > this.maxRadius;
+    }
+}
+
 function createParticles(x, y, isCorrect) {
     const colors = isCorrect 
-        ? ['#00ff88', '#00ffcc', '#88ff00', '#ffff00', '#fff']
-        : ['#ff4444', '#ff8800', '#ff0088', '#fff'];
+        ? ['#00ff88', '#00ffcc', '#88ff00', '#ffff00', '#fff', '#00ff44']
+        : ['#ff4444', '#ff8800', '#ff0088', '#ff0000', '#cc0000', '#880000'];
     
-    for (let i = 0; i < 30; i++) {
+    // Tạo nhiều particles hơn
+    for (let i = 0; i < 50; i++) {
         const color = colors[Math.floor(Math.random() * colors.length)];
         gameState.particles.push(new Particle(x, y, color));
     }
+    
+    // Thêm hiệu ứng text bay lên
+    const feedbackText = isCorrect ? '✓ ĐÚNG!' : '✗ SAI!';
+    const feedbackColor = isCorrect ? '#00ff88' : '#ff4444';
+    gameState.particles.push(new TextParticle(x, y, feedbackText, feedbackColor));
+    
+    // Thêm hiệu ứng vòng tròn lan tỏa
+    gameState.particles.push(new RippleEffect(x, y, isCorrect));
 }
 
 function playSound(isCorrect) {
@@ -445,26 +1184,49 @@ function playSound(isCorrect) {
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
         
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        
         if (isCorrect) {
-            oscillator.frequency.value = 800;
-            oscillator.type = 'sine';
-            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.2);
+            // Âm thanh ĐÚNG - giai điệu vui tươi, tăng dần
+            const notes = [523.25, 659.25, 783.99]; // C5, E5, G5
+            notes.forEach((freq, index) => {
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.frequency.value = freq;
+                oscillator.type = 'sine';
+                
+                const startTime = audioContext.currentTime + index * 0.1;
+                gainNode.gain.setValueAtTime(0, startTime);
+                gainNode.gain.linearRampToValueAtTime(0.3, startTime + 0.05);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + 0.3);
+                
+                oscillator.start(startTime);
+                oscillator.stop(startTime + 0.3);
+            });
         } else {
-            oscillator.frequency.value = 200;
-            oscillator.type = 'sawtooth';
-            gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.3);
+            // Âm thanh SAI - âm trầm, giảm dần, có rung
+            const oscillator1 = audioContext.createOscillator();
+            const oscillator2 = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator1.connect(gainNode);
+            oscillator2.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator1.frequency.value = 150;
+            oscillator2.frequency.value = 155; // Tạo hiệu ứng rung
+            oscillator1.type = 'sawtooth';
+            oscillator2.type = 'sawtooth';
+            
+            gainNode.gain.setValueAtTime(0.25, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+            
+            oscillator1.start();
+            oscillator2.start();
+            oscillator1.stop(audioContext.currentTime + 0.5);
+            oscillator2.stop(audioContext.currentTime + 0.5);
         }
     } catch (e) {
         console.error('Audio error:', e);
@@ -478,7 +1240,14 @@ function spawnBubble() {
     const currentQ = gameData.questions[gameState.currentQuestionIndex];
     const allAnswers = [...currentQ.answers];
     const randomAnswer = allAnswers[Math.floor(Math.random() * allAnswers.length)];
-    const isCorrect = randomAnswer === currentQ.correctAnswer;
+    
+    // Lấy text và image từ answer
+    const answerText = randomAnswer.text || '';
+    const answerImage = randomAnswer.image || null;
+    
+    // So sánh với correctAnswer (cũng là object)
+    const isCorrect = (randomAnswer.text === currentQ.correctAnswer.text && 
+                       randomAnswer.image === currentQ.correctAnswer.image);
     
     // Thử tìm vị trí không bị chồng lên bong bóng khác
     let attempts = 0;
@@ -486,7 +1255,7 @@ function spawnBubble() {
     let newBubble;
     
     while (!validPosition && attempts < 20) {
-        newBubble = new Bubble(randomAnswer, isCorrect);
+        newBubble = new Bubble(answerText, isCorrect, answerImage);
         validPosition = true;
         
         // Kiểm tra khoảng cách với các bong bóng hiện có
@@ -557,8 +1326,43 @@ function onTimeout() {
     
     createParticles(DOM.canvas.width / 2, DOM.canvas.height / 2, false);
     playSound(false);
+    shakeScreen();
+    flashScreen('#ff4444', 0.5);
     
     setTimeout(nextQuestion, 1500);
+}
+
+// Hiệu ứng rung màn hình
+function shakeScreen() {
+    const gameScreen = DOM.gameScreen;
+    gameScreen.style.animation = 'shake 0.5s';
+    setTimeout(() => {
+        gameScreen.style.animation = '';
+    }, 500);
+}
+
+// Hiệu ứng flash màn hình
+function flashScreen(color, opacity) {
+    const flash = document.createElement('div');
+    flash.style.position = 'fixed';
+    flash.style.top = '0';
+    flash.style.left = '0';
+    flash.style.width = '100vw';
+    flash.style.height = '100vh';
+    flash.style.backgroundColor = color;
+    flash.style.opacity = opacity;
+    flash.style.pointerEvents = 'none';
+    flash.style.zIndex = '999';
+    flash.style.transition = 'opacity 0.3s';
+    
+    document.body.appendChild(flash);
+    
+    setTimeout(() => {
+        flash.style.opacity = '0';
+        setTimeout(() => {
+            document.body.removeChild(flash);
+        }, 300);
+    }, 100);
 }
 
 function loadQuestion() {
@@ -570,7 +1374,21 @@ function loadQuestion() {
     gameState.questionAnswered = false;
     const question = gameData.questions[gameState.currentQuestionIndex];
     
-    DOM.questionText.textContent = question.text;
+    // Hiển thị text câu hỏi (nếu có)
+    DOM.questionText.textContent = question.text || '';
+    DOM.questionText.style.display = question.text ? 'block' : 'none';
+    
+    // Hiển thị image câu hỏi (nếu có)
+    const questionImageContainer = document.getElementById('question-image-container');
+    const questionImage = document.getElementById('question-image');
+    
+    if (question.image) {
+        questionImage.src = question.image;
+        questionImageContainer.classList.remove('hidden');
+    } else {
+        questionImageContainer.classList.add('hidden');
+    }
+    
     DOM.currentQEl.textContent = gameState.currentQuestionIndex + 1;
     
     gameState.bubbles = [];
@@ -608,31 +1426,41 @@ function checkBubbleCollision(x, y) {
     }
     
     if (closestBubble) {
-        closestBubble.popped = true;
-        gameState.questionAnswered = true;
-        stopTimer();
-        
         if (closestBubble.isCorrect) {
+            // ĐÚNG: nổ bong bóng
+            closestBubble.popped = true;
+            gameState.questionAnswered = true;
+            stopTimer();
+            
             gameState.score += 10;
             gameState.correctCount++;
             createParticles(closestBubble.x, closestBubble.y, true);
             playSound(true);
+            flashScreen('#00ff88', 0.25);
+            
+            DOM.scoreEl.textContent = gameState.score;
+            
+            const index = gameState.bubbles.indexOf(closestBubble);
+            if (index > -1) gameState.bubbles.splice(index, 1);
+            
+            setTimeout(nextQuestion, 1000);
         } else {
+            // SAI: bong bóng không nổ, rung lắc + đỏ
+            closestBubble.triggerWrongHit();
+            gameState.questionAnswered = true;
+            stopTimer();
+            
             gameState.score = Math.max(0, gameState.score - 5);
             gameState.wrongCount++;
             createParticles(closestBubble.x, closestBubble.y, false);
             playSound(false);
+            shakeScreen();
+            flashScreen('#ff4444', 0.45);
+            
+            DOM.scoreEl.textContent = gameState.score;
+            
+            setTimeout(nextQuestion, 1200);
         }
-        
-        DOM.scoreEl.textContent = gameState.score;
-        
-        // Remove bubble
-        const index = gameState.bubbles.indexOf(closestBubble);
-        if (index > -1) {
-            gameState.bubbles.splice(index, 1);
-        }
-        
-        setTimeout(nextQuestion, 1000);
     }
 }
 
@@ -825,12 +1653,14 @@ async function startGame() {
     }
     
     await camera.start();
+    startGameMusic();
     loadQuestion();
 }
 
 function showResults() {
     gameState.isPlaying = false;
     stopTimer();
+    stopGameMusic();
     
     DOM.resultScreen.classList.remove('hidden');
     DOM.finalScore.textContent = gameState.score;
@@ -847,6 +1677,7 @@ function goHome() {
     if (!confirm('Quay về trang chủ? Tiến trình sẽ bị mất.')) return;
     
     stopTimer();
+    stopGameMusic();
     gameState.isPlaying = false;
     gameState.bubbles = [];
     gameState.particles = [];
@@ -896,6 +1727,20 @@ DOM.homeBtn.addEventListener('click', goHome);
 DOM.playAgainBtn.addEventListener('click', playAgain);
 DOM.backSetupBtn.addEventListener('click', backToSetup);
 
+// Quick add
+document.getElementById('quick-add-btn').addEventListener('click', openQuickAdd);
+document.getElementById('close-quick-add').addEventListener('click', closeQuickAdd);
+document.getElementById('process-quick-add').addEventListener('click', processQuickAdd);
+
+// Export/Import
+document.getElementById('export-data-btn').addEventListener('click', exportData);
+document.getElementById('import-data-btn').addEventListener('click', importData);
+
+// Music
+document.getElementById('upload-music-btn').addEventListener('click', uploadMusic);
+document.getElementById('toggle-music-btn').addEventListener('click', toggleMusic);
+document.getElementById('remove-music-btn').addEventListener('click', removeMusic);
+
 // Toggle hand tracking visualization
 DOM.toggleHandsBtn.addEventListener('click', () => {
     gameState.showHandTracking = !gameState.showHandTracking;
@@ -912,6 +1757,10 @@ window.addEventListener('resize', () => {
 window.addAnswer = addAnswer;
 window.removeAnswerRow = removeAnswerRow;
 window.removeQuestion = removeQuestion;
+window.uploadImage = uploadImage;
+window.uploadAnswerImage = uploadAnswerImage;
+window.removeImage = removeImage;
+window.removeAnswerImage = removeAnswerImage;
 
 // ==================== INITIALIZATION ====================
 function init() {
@@ -922,6 +1771,9 @@ function init() {
     if (!loadFromStorage()) {
         createQuestionCard();
     }
+    
+    // Load music
+    loadMusic();
     
     // Start game loop
     requestAnimationFrame(gameLoop);
